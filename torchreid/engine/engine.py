@@ -98,8 +98,9 @@ class Engine(object):
 
         for epoch in range(start_epoch, max_epoch):
             self.train(epoch, max_epoch, trainloader, fixbase_epoch, open_layers, print_freq)
-            
-            if (epoch+1)>=start_eval and eval_freq>0 and (epoch+1)%eval_freq==0 and (epoch+1)!=max_epoch:
+
+            if (epoch + 1) >= start_eval and eval_freq > 0 and (epoch + 1) % eval_freq == 0 and (
+                    epoch + 1) != max_epoch:
                 rank1 = self.test(
                     epoch,
                     testloader,
@@ -138,12 +139,12 @@ class Engine(object):
         This will be called every epoch in ``run()``, e.g.
 
         .. code-block:: python
-            
+
             for epoch in range(start_epoch, max_epoch):
                 self.train(some_arguments)
 
         .. note::
-            
+
             This needs to be implemented in subclasses.
         """
         raise NotImplementedError
@@ -185,7 +186,7 @@ class Engine(object):
                 Default is False.
         """
         targets = list(testloader.keys())
-        
+
         for name in targets:
             domain = 'source' if name in self.datamanager.sources else 'target'
             print('##### Evaluating {} ({}) #####'.format(name, domain))
@@ -205,7 +206,7 @@ class Engine(object):
                 ranks=ranks,
                 rerank=rerank
             )
-        
+
         return rank1
 
     @torch.no_grad()
@@ -218,7 +219,7 @@ class Engine(object):
         self.model.eval()
 
         print('Extracting features from query set ...')
-        qf, q_pids, q_camids = [], [], [] # query features, query person IDs and query camera IDs
+        qf, q_pids, q_camids = [], [], []  # query features, query person IDs and query camera IDs
         for batch_idx, data in enumerate(queryloader):
             imgs, pids, camids = self._parse_data_for_eval(data)
             if self.use_gpu:
@@ -234,9 +235,9 @@ class Engine(object):
         q_pids = np.asarray(q_pids)
         q_camids = np.asarray(q_camids)
         print('Done, obtained {}-by-{} matrix'.format(qf.size(0), qf.size(1)))
-
+        # np.save('/home/chundi/CSM2019_query', qf.cpu())
         print('Extracting features from gallery set ...')
-        gf, g_pids, g_camids = [], [], [] # gallery features, gallery person IDs and gallery camera IDs
+        gf, g_pids, g_camids = [], [], []  # gallery features, gallery person IDs and gallery camera IDs
         end = time.time()
         for batch_idx, data in enumerate(galleryloader):
             imgs, pids, camids = self._parse_data_for_eval(data)
@@ -253,7 +254,7 @@ class Engine(object):
         g_pids = np.asarray(g_pids)
         g_camids = np.asarray(g_camids)
         print('Done, obtained {}-by-{} matrix'.format(gf.size(0), gf.size(1)))
-
+        # np.save('/home/chundi/CSM2019_index', gf.cpu())
         print('Speed: {:.4f} sec/batch'.format(batch_time.avg))
 
         if normalize_feature:
@@ -261,41 +262,47 @@ class Engine(object):
             qf = F.normalize(qf, p=2, dim=1)
             gf = F.normalize(gf, p=2, dim=1)
 
-        print('Computing distance matrix with metric={} ...'.format(dist_metric))
-        distmat = metrics.compute_distance_matrix(qf, gf, dist_metric)
-        distmat = distmat.numpy()
+        embd_dir = '//media/chundi/Data/WIDER_FACE/feats/'
+        np.save(embd_dir + 'CSM2019_osnet_x0_5_query_{}'.format(epoch), qf.cpu())
+        np.save(embd_dir + 'CSM2019_osnet_x0_5_index_{}'.format(epoch), gf.cpu())
 
-        if rerank:
-            print('Applying person re-ranking ...')
-            distmat_qq = metrics.compute_distance_matrix(qf, qf, dist_metric)
-            distmat_gg = metrics.compute_distance_matrix(gf, gf, dist_metric)
-            distmat = re_ranking(distmat, distmat_qq, distmat_gg)
+        if dataset_name != 'csm2019':
+            print('Computing distance matrix with metric={} ...'.format(dist_metric))
+            distmat = metrics.compute_distance_matrix(qf, gf, dist_metric)
+            distmat = distmat.numpy()
 
-        print('Computing CMC and mAP ...')
-        cmc, mAP = metrics.evaluate_rank(
-            distmat,
-            q_pids,
-            g_pids,
-            q_camids,
-            g_camids,
-            use_metric_cuhk03=use_metric_cuhk03
-        )
-
-        print('** Results **')
-        print('mAP: {:.1%}'.format(mAP))
-        print('CMC curve')
-        for r in ranks:
-            print('Rank-{:<3}: {:.1%}'.format(r, cmc[r-1]))
-
-        if visrank:
-            visualize_ranked_results(
+            if rerank:
+                print('Applying person re-ranking ...')
+                distmat_qq = metrics.compute_distance_matrix(qf, qf, dist_metric)
+                distmat_gg = metrics.compute_distance_matrix(gf, gf, dist_metric)
+                distmat = re_ranking(distmat, distmat_qq, distmat_gg)
+            print('Computing CMC and mAP ...')
+            cmc, mAP = metrics.evaluate_rank(
                 distmat,
-                self.datamanager.return_testdataset_by_name(dataset_name),
-                save_dir=osp.join(save_dir, 'visrank-'+str(epoch+1), dataset_name),
-                topk=visrank_topk
+                q_pids,
+                g_pids,
+                q_camids,
+                g_camids,
+                use_metric_cuhk03=use_metric_cuhk03
             )
 
-        return cmc[0]
+            print('** Results **')
+            print('mAP: {:.1%}'.format(mAP))
+            print('CMC curve')
+            for r in ranks:
+                print('Rank-{:<3}: {:.1%}'.format(r, cmc[r - 1]))
+
+            if visrank:
+                visualize_ranked_results(
+                    distmat,
+                    self.datamanager.return_testdataset_by_name(dataset_name),
+                    save_dir=osp.join(save_dir, 'visrank-' + str(epoch + 1), dataset_name),
+                    topk=visrank_topk
+                )
+
+            return cmc[0]
+        else:
+            return -1.0
 
     def _compute_loss(self, criterion, outputs, targets):
         if isinstance(outputs, (tuple, list)):

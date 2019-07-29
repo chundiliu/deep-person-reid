@@ -5,7 +5,6 @@ from .dataset import Dataset, ImageDataset, VideoDataset
 from .image import *
 from .video import *
 
-
 __image_datasets = {
     'market1501': Market1501,
     'cuhk03': CUHK03,
@@ -16,9 +15,9 @@ __image_datasets = {
     'cuhk01': CUHK01,
     'ilids': iLIDS,
     'sensereid': SenseReID,
-    'prid': PRID
+    'prid': PRID,
+    'csm2019': CastSearchMovie2019
 }
-
 
 __video_datasets = {
     'mars': Mars,
@@ -54,7 +53,7 @@ def register_image_dataset(name, dataset):
         dataset (Dataset): the new dataset class.
 
     Examples::
-        
+
         import torchreid
         import NewDataset
         torchreid.data.register_image_dataset('new_dataset', NewDataset)
@@ -85,7 +84,7 @@ def register_video_dataset(name, dataset):
         dataset (Dataset): the new dataset class.
 
     Examples::
-        
+
         import torchreid
         import NewDataset
         torchreid.data.register_video_dataset('new_dataset', NewDataset)
